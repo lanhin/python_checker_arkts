@@ -21,7 +21,7 @@
 
 #### `ets_checker.py` - 主验证器
 ```python
-# 基本用法
+# 基本用法，work-dir应当是包含 ir_dump 的那一级目录
 python ets_checker.py test_file.ets --work-dir /path/to/work/dir
 ```
 

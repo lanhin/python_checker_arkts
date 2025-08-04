@@ -14,6 +14,7 @@ def create_sample_ir_files():
     work_dir.mkdir(parents=True, exist_ok=True)
     
     # 创建BranchElimination之前的IR文件
+    # 注意：方法名中的::被替换为_，所以ETSGLOBAL::concat_loop0变成ETSGLOBAL_concat_loop0
     branch_elim_before = work_dir / "001_pass_0001_ets_string_concat_loop_ETSGLOBAL_concat_loop0_BranchElimination.ir"
     with open(branch_elim_before, 'w') as f:
         f.write("""Method: ets_string_concat_loop.ETSGLOBAL::concat_loop0

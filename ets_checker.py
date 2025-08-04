@@ -72,16 +72,38 @@ class IRScope:
                 return line
         return None
 
-    def find_block(self, match: str) -> Optional[str]:
-        """查找基本块"""
+    def find_block(self, match: str) -> Optional['IRScope']:
+        """查找基本块并返回该块的范围"""
         if not match:
             return None
         
+        # 查找基本块的开始
+        start_index = None
         for i, line in enumerate(self.lines[self.current_index:], self.current_index):
             if self._contains(line, match):
-                self.current_index = i + 1
-                return line
-        return None
+                start_index = i
+                break
+        
+        if start_index is None:
+            return None
+        
+        # 查找基本块的结束（下一个基本块开始或文件结束）
+        end_index = len(self.lines)
+        for i in range(start_index + 1, len(self.lines)):
+            line = self.lines[i]
+            # 检查是否是新的基本块开始（通常以 "prop:" 开头）
+            if line.strip().startswith("prop:"):
+                end_index = i
+                break
+        
+        # 创建新的IRScope，只包含该基本块的内容
+        block_lines = self.lines[start_index:end_index]
+        block_scope = IRScope(block_lines, f"block_{match}", 0)
+        
+        # 更新当前索引到基本块结束位置
+        self.current_index = end_index
+        
+        return block_scope
 
     def count(self, match: str) -> int:
         """统计匹配的行数"""
@@ -151,17 +173,22 @@ class ETSChecker:
         self.current_method = match
         self.log_info(f"Selecting method: {match}")
         
-        # 查找IR文件
-        ir_pattern = self.work_dir / "ir_dump" / "*.ir"
+        # 处理方法名，将特殊字符替换为下划线（与checker.rb保持一致）
+        processed_method = re.sub(r'::|[<>]|\.|-', '_', match)
+        self.log_info(f"Processed method name: {processed_method}")
+        
+        # 查找包含处理后方法名的IR文件
+        ir_pattern = self.work_dir / "ir_dump" / f"*{processed_method}*.ir"
         self.ir_files = sorted(glob.glob(str(ir_pattern)))
         
         if not self.ir_files:
-            self.raise_error(f"No IR files found in {ir_pattern}")
+            self.raise_error(f"IR dumps not found for method: {processed_method}")
             return
         
         self.current_file_index = 0
         self.ir_scope = IRScope.from_file(self.ir_files[self.current_file_index], 'IR')
         self.log_info(f"Loaded IR file: {self.ir_files[self.current_file_index]}")
+        self.log_info(f"Found {len(self.ir_files)} IR files for method: {match}")
 
     def PASS_BEFORE(self, pass_name: str):
         """选择指定pass之前的IR文件"""
@@ -200,9 +227,12 @@ class ETSChecker:
             return
         
         self.log_info(f"Searching in block: {match}")
-        result = self.ir_scope.find_block(f"prop: {match}")
-        if not result:
+        block_scope = self.ir_scope.find_block(f"prop: {match}")
+        if not block_scope:
             self.raise_error(f"Block not found: {match}")
+        else:
+            # 将当前搜索范围切换到找到的基本块
+            self.ir_scope = block_scope
 
     def INST(self, match: str):
         """查找指定指令"""

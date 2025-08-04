@@ -50,16 +50,15 @@ class IRScope:
                 return line
         return None
 
-    def find_not(self, match: str) -> Optional[str]:
-        """查找不匹配的行"""
+    def exists(self, match: str) -> bool:
+        """检查是否存在匹配的行"""
         if not match:
-            return None
+            return False
         
-        for i, line in enumerate(self.lines[self.current_index:], self.current_index):
-            if not self._contains(line, match):
-                self.current_index = i + 1
-                return line
-        return None
+        for line in self.lines[self.current_index:]:
+            if self._contains(line, match):
+                return True
+        return False
 
     def find_next_not(self, match: str) -> Optional[str]:
         """查找下一个不匹配的行"""
@@ -252,8 +251,8 @@ class ETSChecker:
             return
         
         self.log_info(f"Verifying instruction not present: {match}")
-        result = self.ir_scope.find_not(match)
-        if not result:
+        exists = self.ir_scope.exists(match)
+        if exists:
             self.raise_error(f"Instruction should not exist: {match}")
 
     def INST_COUNT(self, match: str, expected_count: int):

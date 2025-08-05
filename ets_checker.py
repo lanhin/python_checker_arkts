@@ -281,7 +281,7 @@ class ETSChecker:
             line = line.strip()
             
             # 跳过注释和空行
-            if not line or line.startswith('//') or not line.startswith('//!'):
+            if not line or (line.startswith('//') and not line.startswith('//!')):
                 continue
             
             # 解析指令

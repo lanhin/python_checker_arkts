@@ -32,7 +32,7 @@ class IRScope:
         """查找匹配的行"""
         if not match:
             return None
-        
+
         for i, line in enumerate(self.lines[self.current_index:], self.current_index):
             if self._contains(line, match):
                 self.current_index = i + 1
@@ -43,7 +43,7 @@ class IRScope:
         """查找下一个匹配的行"""
         if not match:
             return None
-        
+
         for i, line in enumerate(self.lines[self.current_index:], self.current_index):
             if self._contains(line, match):
                 self.current_index = i + 1
@@ -54,7 +54,7 @@ class IRScope:
         """检查是否存在匹配的行"""
         if not match:
             return False
-        
+
         for line in self.lines[self.current_index:]:
             if self._contains(line, match):
                 return True
@@ -64,7 +64,7 @@ class IRScope:
         """查找下一个不匹配的行"""
         if not match:
             return None
-        
+
         for i, line in enumerate(self.lines[self.current_index:], self.current_index):
             if not self._contains(line, match):
                 self.current_index = i + 1
@@ -75,17 +75,17 @@ class IRScope:
         """查找基本块并返回该块的范围"""
         if not match:
             return None
-        
+
         # 查找基本块的开始
         start_index = None
         for i, line in enumerate(self.lines[self.current_index:], self.current_index):
             if self._contains(line, match):
                 start_index = i
                 break
-        
+
         if start_index is None:
             return None
-        
+
         # 查找基本块的结束（下一个基本块开始或文件结束）
         end_index = len(self.lines)
         for i in range(start_index + 1, len(self.lines)):
@@ -94,21 +94,21 @@ class IRScope:
             if line.strip().startswith("prop:"):
                 end_index = i
                 break
-        
+
         # 创建新的IRScope，只包含该基本块的内容
         block_lines = self.lines[start_index:end_index]
         block_scope = IRScope(block_lines, f"block_{match}", 0)
-        
+
         # 更新当前索引到基本块结束位置
         self.current_index = end_index
-        
+
         return block_scope
 
     def count(self, match: str) -> int:
         """统计匹配的行数"""
         if not match:
             return 0
-        
+
         count = 0
         for line in self.lines:
             if self._contains(line, match) and not line.startswith("Method:"):
@@ -141,15 +141,25 @@ class ETSChecker:
 
     def __init__(self, work_dir: str = "/tmp/ets_checker"):
         self.work_dir = Path(work_dir)
+
+        # 检查工作目录是否存在
+        if not self.work_dir.exists():
+            raise FileNotFoundError(f"Work directory does not exist: {work_dir}")
+
+        # 检查ir_dump子目录是否存在
+        ir_dump_dir = self.work_dir / "ir_dump"
+        if not ir_dump_dir.exists():
+            raise FileNotFoundError(f"ir_dump directory not found in work directory: {work_dir}. Please set workdir to the parent directory containing ir_dump directory.")
+
         self.work_dir.mkdir(exist_ok=True)
-        
+
         # 当前状态
         self.current_method: Optional[str] = None
         self.current_pass: Optional[str] = None
         self.ir_scope: Optional[IRScope] = None
         self.ir_files: List[str] = []
         self.current_file_index: int = 0
-        
+
         # 验证结果
         self.errors: List[str] = []
         self.warnings: List[str] = []
@@ -171,19 +181,19 @@ class ETSChecker:
         """选择要验证的方法"""
         self.current_method = match
         self.log_info(f"Selecting method: {match}")
-        
+
         # 处理方法名，将特殊字符替换为下划线（与checker.rb保持一致）
         processed_method = re.sub(r'::|[<>]|\.|-', '_', match)
         self.log_info(f"Processed method name: {processed_method}")
-        
+
         # 查找包含处理后方法名的IR文件
         ir_pattern = self.work_dir / "ir_dump" / f"*{processed_method}*.ir"
         self.ir_files = sorted(glob.glob(str(ir_pattern)))
-        
+
         if not self.ir_files:
             self.raise_error(f"IR dumps not found for method: {processed_method}")
             return
-        
+
         self.current_file_index = 0
         self.ir_scope = IRScope.from_file(self.ir_files[self.current_file_index], 'IR')
         self.log_info(f"Loaded IR file: {self.ir_files[self.current_file_index]}")
@@ -193,7 +203,7 @@ class ETSChecker:
         """选择指定pass之前的IR文件"""
         self.current_pass = f"Pass before: {pass_name}"
         self.log_info(f"Selecting pass before: {pass_name}")
-        
+
         # 查找包含pass名称的文件
         for i, ir_file in enumerate(self.ir_files):
             if pass_name in os.path.basename(ir_file):
@@ -201,14 +211,14 @@ class ETSChecker:
                 self.ir_scope = IRScope.from_file(self.ir_files[self.current_file_index], 'IR')
                 self.log_info(f"Loaded IR file: {self.ir_files[self.current_file_index]}")
                 return
-        
+
         self.raise_error(f"IR file not found for pass: {pass_name}")
 
     def PASS_AFTER(self, pass_name: str):
         """选择指定pass之后的IR文件"""
         self.current_pass = f"Pass after: {pass_name}"
         self.log_info(f"Selecting pass after: {pass_name}")
-        
+
         # 查找包含pass名称的文件
         for i, ir_file in enumerate(self.ir_files):
             if pass_name in os.path.basename(ir_file):
@@ -216,7 +226,7 @@ class ETSChecker:
                 self.ir_scope = IRScope.from_file(self.ir_files[self.current_file_index], 'IR')
                 self.log_info(f"Loaded IR file: {self.ir_files[self.current_file_index]}")
                 return
-        
+
         self.raise_error(f"IR file not found for pass: {pass_name}")
 
     def IN_BLOCK(self, match: str):
@@ -224,7 +234,7 @@ class ETSChecker:
         if not self.ir_scope:
             self.raise_error("No IR scope selected")
             return
-        
+
         self.log_info(f"Searching in block: {match}")
         block_scope = self.ir_scope.find_block(f"prop: {match}")
         if not block_scope:
@@ -238,7 +248,7 @@ class ETSChecker:
         if not self.ir_scope:
             self.raise_error("No IR scope selected")
             return
-        
+
         self.log_info(f"Searching for instruction: {match}")
         result = self.ir_scope.find(match)
         if not result:
@@ -249,7 +259,7 @@ class ETSChecker:
         if not self.ir_scope:
             self.raise_error("No IR scope selected")
             return
-        
+
         self.log_info(f"Verifying instruction not present: {match}")
         exists = self.ir_scope.exists(match)
         if exists:
@@ -260,10 +270,10 @@ class ETSChecker:
         if not self.ir_scope:
             self.raise_error("No IR scope selected")
             return
-        
+
         actual_count = self.ir_scope.count(match)
         self.log_info(f"Counting instruction: {match}, expected: {expected_count}, actual: {actual_count}")
-        
+
         if actual_count != expected_count:
             self.raise_error(f"Instruction count mismatch for {match}: expected={expected_count}, actual={actual_count}")
 
@@ -272,26 +282,26 @@ class ETSChecker:
         if not os.path.exists(test_file):
             self.raise_error(f"Test file not found: {test_file}")
             return
-        
+
         with open(test_file, 'r', encoding='utf-8') as f:
             lines = f.readlines()
-        
+
         # 解析验证指令
         for line_num, line in enumerate(lines, 1):
             line = line.strip()
-            
-            # 跳过注释和空行
-            if not line or (line.startswith('//') and not line.startswith('//!')):
+
+            # 只处理以 //! 开头的验证指令行
+            if not line.startswith('//!'):
                 continue
-            
+
             # 解析指令
             parts = line[3:].strip().split(None, 1)  # 去掉 '//! '
             if len(parts) < 1:
                 continue
-            
+
             command = parts[0]
             args = parts[1] if len(parts) > 1 else ""
-            
+
             try:
                 self._execute_command(command, args, line_num)
             except Exception as e:
@@ -299,6 +309,9 @@ class ETSChecker:
 
     def _execute_command(self, command: str, args: str, line_num: int):
         """执行验证命令"""
+        # 打印调试信息：调用的命令
+        self.log_info(f"Executing command: {command} with args: '{args}' at line {line_num}")
+
         if command == "METHOD":
             # 解析方法名
             method_match = re.search(r'"([^"]+)"', args)
@@ -306,7 +319,7 @@ class ETSChecker:
                 self.METHOD(method_match.group(1))
             else:
                 self.raise_error(f"Invalid METHOD format at line {line_num}")
-        
+
         elif command == "PASS_BEFORE":
             # 解析pass名称
             pass_match = re.search(r'"([^"]+)"', args)
@@ -314,7 +327,7 @@ class ETSChecker:
                 self.PASS_BEFORE(pass_match.group(1))
             else:
                 self.raise_error(f"Invalid PASS_BEFORE format at line {line_num}")
-        
+
         elif command == "PASS_AFTER":
             # 解析pass名称
             pass_match = re.search(r'"([^"]+)"', args)
@@ -322,7 +335,7 @@ class ETSChecker:
                 self.PASS_AFTER(pass_match.group(1))
             else:
                 self.raise_error(f"Invalid PASS_AFTER format at line {line_num}")
-        
+
         elif command == "IN_BLOCK":
             # 解析块名称
             block_match = re.search(r'/([^/]+)/', args)
@@ -330,7 +343,7 @@ class ETSChecker:
                 self.IN_BLOCK(block_match.group(1))
             else:
                 self.raise_error(f"Invalid IN_BLOCK format at line {line_num}")
-        
+
         elif command == "INST":
             # 解析指令模式
             inst_match = re.search(r'/([^/]+)/', args)
@@ -338,7 +351,7 @@ class ETSChecker:
                 self.INST(inst_match.group(1))
             else:
                 self.raise_error(f"Invalid INST format at line {line_num}")
-        
+
         elif command == "INST_NOT":
             # 解析指令模式
             inst_match = re.search(r'/([^/]+)/', args)
@@ -346,7 +359,7 @@ class ETSChecker:
                 self.INST_NOT(inst_match.group(1))
             else:
                 self.raise_error(f"Invalid INST_NOT format at line {line_num}")
-        
+
         elif command == "INST_COUNT":
             # 解析指令计数
             # 格式: /pattern/,count
@@ -357,21 +370,21 @@ class ETSChecker:
                 self.INST_COUNT(pattern, count)
             else:
                 self.raise_error(f"Invalid INST_COUNT format at line {line_num}")
-        
+
         elif command in ["CHECKER", "SKIP_IF", "RUN", "RUN_PAOC"]:
             # 这些命令在解析阶段不需要执行
             pass
-        
+
         else:
             self.log_info(f"Unknown command: {command} at line {line_num}")
 
     def run_validation(self, test_file: str):
         """运行完整的验证流程"""
         self.log_info(f"Starting validation for: {test_file}")
-        
+
         # 解析测试文件
         self.parse_test_file(test_file)
-        
+
         # 输出结果
         if self.errors:
             self.log_info(f"Validation failed with {len(self.errors)} errors:")
@@ -382,22 +395,25 @@ class ETSChecker:
             self.log_info("Validation completed successfully!")
             return True
 
-
 def main():
     """主函数"""
+    # 打印完整的Python命令
+    import sys
+    print(f"Command: {' '.join(sys.argv)}")
+
     parser = argparse.ArgumentParser(description='ETS IR验证器')
     parser.add_argument('test_file', help='测试文件路径')
     parser.add_argument('--work-dir', default='/tmp/ets_checker', help='工作目录')
     parser.add_argument('--verbose', '-v', action='store_true', help='详细输出')
-    
+
     args = parser.parse_args()
-    
+
     # 创建验证器
     checker = ETSChecker(args.work_dir)
-    
+
     # 运行验证
     success = checker.run_validation(args.test_file)
-    
+
     # 返回退出码
     exit(0 if success else 1)
 
